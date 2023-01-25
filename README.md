@@ -1,1 +1,1 @@
-# ChessAI
+# QuentinChess
