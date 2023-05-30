@@ -12,25 +12,6 @@ import time
 import chess
 import chess.engine
 
-# engine = chess.engine.SimpleEngine.popen_uci(r"stockfish/stockfish_15.1_x64_bmi2")
-# engine2 = chess.engine.SimpleEngine.popen_uci(r"stockfish/stockfish_15.1_x64_bmi2")
-# engine2.configure({"Skill Level": 10})
-
-# board = chess.Board()
-
-# turn = 0
-# while not board.is_game_over():
-#     if turn//2:
-#         result = engine.play(board, chess.engine.Limit(time=0.1))
-#     else:
-#         result = engine2.play(board, chess.engine.Limit(time=0.1))
-#     board.push(result.move)
-#     print(board)
-#     print()
-
-# engine.quit()
-
-
 class Game(object):
     def __init__(self, engine:str='stockfish',
                        player_colour:str='white',
@@ -120,3 +101,17 @@ class Game(object):
             else:
                 print('  Input must be correspond to a move value or quit.'
                       ' Try again.')
+                
+if __name__=='__main__':
+    from scipy.special import softmax    
+    
+    g = Game()
+    board = g.board
+    engine = g.engine
+    
+    t = []
+    for el in board.legal_moves:
+        info = engine.analyse(board, chess.engine.Limit(time=.005), root_moves=[el])
+        t.append(info["score"].relative.score())
+        sm = softmax(t)
+        
