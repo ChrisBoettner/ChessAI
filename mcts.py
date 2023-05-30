@@ -5,7 +5,9 @@ Created on Mon May 29 08:22:40 2023
 
 @author: chris
 """
+import chess
 from chess import Board, Move
+from scipy.special import softmax   
 import numpy as np
 import random
 
@@ -100,8 +102,12 @@ class Node:
     
     
 class Game:
-    def __init__(self) -> None: 
+    def __init__(self, engine='stockfish') -> None: 
         self.root = Node(Board().epd())
+        
+        if engine == 'stockfish':
+            self.engine = (chess.engine.SimpleEngine
+                            .popen_uci(r"stockfish/stockfish_15.1_x64_bmi2"))
         
     def play(self, **kwargs):
         game_states = []
@@ -125,8 +131,8 @@ class Game:
         return game_states, policies, target_values 
 
     def choose_move(self, node, mode='stochastic', **kwargs):
-        policy = self.get_policy(node, **kwargs)
-        
+        policy = self.get_policy_stockfish(node, **kwargs)
+        breakpoint()
         if mode=='stochastic':
             action, new_node = random.choices(list(node.children.items()), 
                                             policy, k=1)[0]
@@ -141,6 +147,15 @@ class Game:
             game.selection(node)
         policy = node.get_child_visits()**temperature
         return policy
+    
+    def get_policy_stockfish(self, node, time_limit=.01):
+        scores = []
+        for move in node.board.legal_moves:
+            info = self.engine.analyse(node.board, 
+                                        chess.engine.Limit(time=time_limit),
+                                        root_moves=[move])
+            scores.append(info["score"].relative.score())
+        return softmax(scores)
     
     @staticmethod
     def get_target_values(node, number_of_moves):
@@ -194,4 +209,4 @@ class Game:
          
 if __name__=='__main__':
     game = Game()
-    #a, b, c = game.play()
+    a, b, c = game.play()
