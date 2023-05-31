@@ -1,6 +1,14 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
+Created on Wed May 31 13:24:02 2023
+
+@author: chris
+"""
+
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""
 Created on Mon May 29 08:22:40 2023
 
 @author: chris
@@ -9,6 +17,7 @@ from chess import Board, Move
 import chess.engine
 from scipy.special import softmax   
 import numpy as np
+import multiprocessing
 
 class Node:
     def __init__(self, state:str, parent=None, policy_probability=1, 
@@ -154,10 +163,9 @@ class Game:
         
         return action, new_node, policy
             
-    @staticmethod
-    def get_policy(node, temperature=1, plays=25):
+    def get_policy(self, node, temperature=1, plays=25):
         for i in range(plays):
-            game.selection(node)
+            self.selection(node)
         policy = np.power(node.get_child_visits(), 1/temperature)
         return policy
     
@@ -213,7 +221,7 @@ class Game:
     
     
 class TrainingGame:
-    def __init__(self, root_state=None, engine='stockfish', engine_skill=18) -> None: 
+    def __init__(self, root_state=None, engine='stockfish', engine_skill=20) -> None: 
         self.root_state = root_state
         self.reset()
         
@@ -251,29 +259,30 @@ class TrainingGame:
         game_states = []
         policies    = []
         
-        node = self.root
+        if root_state is None:
+            self.board = Board()
         
-        game_states.append(node.state)
+        game_states.append(self.board.epd())
         while True:
-            _, node, policy = self.choose_move(node, **kwargs)
+            policy = self.make_move(**kwargs)
             policies.append(policy)
-            game_states.append(node.state)
-            if node.game_over:
+            game_states.append(self.board.epd())
+            if self.board.is_game_over():
+                policies.append({})
                 break
-        target_values = self.get_target_values(node, len(game_states))
+        target_values = self.get_target_values()
         return game_states, policies, target_values 
     
     def reset(self):
         self.move_counter = 0
         
         if self.root_state is None:
-            self.root = Node(Board().epd(), training_node=True)
+            self.board = Board()
         else:
-            self.root = Node(self.root_state, training_node=True)
+            self.board = Board(self.root_state)
 
-    def choose_move(self, node, mode='stochastic', **kwargs):
-        node.expand(training_node=True)
-        policy = self.get_policy_stockfish(node, **kwargs)
+    def make_move(self, mode='stochastic', **kwargs):
+        policy = self.get_policy_stockfish(**kwargs)
         
         if mode=='stochastic':
             action = np.random.choice(list(policy.keys()),p=list(policy.values()))
@@ -282,19 +291,21 @@ class TrainingGame:
         else:
             return ValueError("mode not known.")
             
-        new_node = node.children[action]           
-        new_node.fill(action)
+        self.board.push(Move.from_uci(action))
         self.move_counter +=1
         
-        return action, new_node, policy
+        return policy
     
-    def get_policy_stockfish(self, node, time_limit=.01, temperature=1, 
+    def get_policy_stockfish(self, time_limit=.01, temperature=1, 
                              mate_score=int(1e+5)):
-        infos = self.engine.analyse(node.board, chess.engine.Limit(time=time_limit), 
+        infos = self.engine.analyse(self.board, chess.engine.Limit(time=time_limit), 
                                     multipv=500, 
                                     options = {"Skill Level": 
                                                self.engine_skill[self.move_counter%2]})
+            
+        return self.calculate_score(infos, temperature, mate_score)
 
+    def calculate_score(self, infos, temperature, mate_score):
         scores = [info["score"].relative.score(mate_score=mate_score) for info in infos]
         scores = softmax(scores)**(1/temperature)
         scores = scores/np.sum(scores)
@@ -302,38 +313,51 @@ class TrainingGame:
         scores = {info["pv"][0].uci():score for info, score in zip(infos,scores)}
         return scores
     
-    @staticmethod
-    def get_target_values(node, number_of_moves):
-        last_turn = node.board.turn
-        winner    = node.board.outcome().winner
+    def get_target_values(self):
+        last_turn = self.board.turn
+        winner    = self.board.outcome().winner
         
         if winner is None:
-            target_values = np.zeros(number_of_moves)
+            target_values = np.zeros(self.move_counter+1).astype(int)
         else:
-            target_values = np.empty((number_of_moves,)).astype(int)
-            if number_of_moves%2:
+            target_values = np.empty((self.move_counter+1,)).astype(int)
+            if (self.move_counter+1)%2:
                 target_values[::2] = 1
                 target_values[1::2] = -1
             else:
                 target_values[::2] = -1
                 target_values[1::2] = 1
-                
+            
+            # not really needed since game always ends on turn of loser
             if last_turn!=winner:
                 target_values *= -1
-        
         return target_values
          
 if __name__=='__main__':
-    game = TrainingGame()
-    k = 0
-    for i in range(30):
-        a, b, c = game.play()
-        game.reset()
-        if sum(c)==0:
-            k +=1
-            
-    # Skill level might not work, since main difference in skill levels seems to be that
-    # it takes non-ideal moves as evaluated by analyse function, but we don't use the
-    # plays picked by the engine, so that will have no effect
+    def flatten_list(nested_list):
+        return [item for sublist in nested_list for item in sublist]
     
-    # probably better to increase temperature in order to increase randomness 
+    def process_results(results, flatten=True):
+        results = [list(i) for i in zip(*results)] # reshuffle
+        if flatten:
+            results = [flatten_list(i) for i in results]
+        return results
+    
+    def play_game(i=None):
+        game = TrainingGame()
+        a, b, c = game.play()
+        game.engine.quit()
+        del game
+        return [a, b, c]
+   
+    def play_game_set(num=30, parallel=True, **kwargs):
+        if parallel:
+            pool = multiprocessing.Pool(multiprocessing.cpu_count())
+            results = pool.map(play_game, range(num))
+        else:
+            results = [play_game(i) for i in range(num)]
+            
+        return process_results(results, **kwargs)
+    
+    results = play_game_set(50)
+    
