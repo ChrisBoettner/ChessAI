@@ -6,17 +6,16 @@ Created on Thu Jun  1 16:14:57 2023
 @author: chris
 """
 import multiprocessing
+import warnings
+from typing import Any, Optional
 
 import chess.engine
 import numpy as np
-from chess import Move
+from chess.engine import Info
 from scipy.special import softmax
 
-import warnings
-
+from mcts import Game, Node
 from utilities import flatten_list
-
-from mcts import Game
 
 
 class TrainingGame(Game):
@@ -26,12 +25,12 @@ class TrainingGame(Game):
 
     def __init__(
         self,
-        root_state: str = None,
+        root_state: Optional[str] = None,
         engine: str = "stockfish",
         engine_skill: int | str | tuple = 20,
     ) -> None:
         """
-        Initilize Training Game.
+        Initialize training game.
 
         Parameters
         ----------
@@ -45,16 +44,6 @@ class TrainingGame(Game):
             given, use for both players. If tuple is given, use each entry for one of
             the players. The default is 20.
 
-        Raises
-        ------
-        ValueError
-            DESCRIPTION.
-
-        Returns
-        -------
-        None
-            DESCRIPTION.
-
         """
         self.root_state = root_state
         self.reset()
@@ -65,29 +54,112 @@ class TrainingGame(Game):
             )
             self.set_skill_level(engine_skill)
 
-    def make_move(self, node, action):
-        node.board.push(Move.from_uci(action))
+    def make_move(self, node: Node, action: str) -> Node:
+        """
+        Make move by taking node, pushing action on node.board, and returning same node.
+
+        Parameters
+        ----------
+        node : Node
+            The node containing the board state.
+        action : str
+            UCI of move to make.
+
+        Returns
+        -------
+        Node
+            The node containing the board state, now advanced by action.
+
+        """
+        node.make_move(action)
         return node
 
-    def get_policy(self, node, time_limit=0.01, temperature=1, mate_score=int(1e5)):
+    def get_policy(
+        self,
+        node: Node,
+        time_limit: float = 0.01,
+        temperature: float = 1,
+        mate_score: int = int(1e5),
+    ) -> dict[str, float]:
+        """
+        Get policy by letting stockfish evaluate the next move, and using softmax on
+        the stockfish values.
+
+        Parameters
+        ----------
+        node : Node
+            The node containing the board state.
+        time_limit : float, optional
+            Time limit for stockfish evaluation. The default is .01.
+        temperature : float, optional
+            Temperature parameter that balances exploration and exploitation. Higher
+            values lead to more random moves. The default is 1.
+        mate_score : int, optional
+            Score associated with board states that lead to a check mate. The default
+            is int(1e5).
+
+        Returns
+        -------
+        dict[str, float]
+            Dict of policy, of form {move uci: policy value}.
+
+        """
         infos = self.engine.analyse(
             node.board,
             chess.engine.Limit(time=time_limit),
-            multipv=500,
-            options={"Skill Level": self.engine_skill[self.move_counter % 2]},
+            multipv=500,  # maximum number of possible moves considered
+            options={
+                "Skill Level": self.engine_skill[self.move_counter % 2]
+            },  # probably useless
         )
         return self.calculate_score(infos, temperature, mate_score)
 
     @staticmethod
-    def calculate_score(infos, temperature, mate_score):
+    def calculate_score(
+        infos: list[Info],
+        temperature: float,
+        mate_score: int,
+    ) -> dict[str, float]:
+        """
+        Calculate score from InfoDicts returned by stockfish and calculating softmax on
+        those
+
+        Parameters
+        ----------
+        infos : list[Info]
+            InfoDicts for every move considered by stockfish, containing all
+            information on the move, including scores.
+        temperature : float
+            Temperature parameter that balances exploration and exploitation. Higher
+            values lead to more random moves.
+        mate_score : int
+            Score associated with board states that lead to a check mate.
+
+        Returns
+        -------
+        dict[str, float]
+            Dict of policy, of form {move uci: policy value}.
+
+        """
         scores = [info["score"].relative.score(mate_score=mate_score) for info in infos]
         scores = softmax(scores) ** (1 / temperature)
-        scores = scores / np.sum(scores)
+        scores /= np.sum(scores)
 
         scores = {info["pv"][0].uci(): score for info, score in zip(infos, scores)}
         return scores
 
-    def set_skill_level(self, engine_skill) -> None:
+    def set_skill_level(self, engine_skill: int | str | tuple) -> None:
+        """
+        Set skill level of stockfish engine.
+
+        Parameters
+        ----------
+        engine_skill : int, optional
+            Skill level of the engine. Can be a number or "random". If one value is
+            given, use for both players. If tuple is given, use each entry for one of
+            the players. The default is 20.
+
+        """
         if engine_skill != 20:
             warnings.warn(
                 "CAUTION: ENGINE_SKILL MIGHT NOT ACTUALLY HAVE AN EFFECT BASED ON \
@@ -141,22 +213,78 @@ class TrainingGame(Game):
         return np.random.choice(levels, p=weights / sum(weights))
 
 
-def get_game_data(i=None):
+def get_game_data(i: Optional[int] = None) -> list[list]:
+    """
+    Create TrainingGame object, play game, quit engine and return results. Mainly used
+    for parallelizing.
+
+    Parameters
+    ----------
+    i : int, optional
+        Primarely needed for multiprocessing. The default is None.
+
+    Returns
+    -------
+    list[list]
+        Game results, containing game states, policies and target values.
+
+    """
     game = TrainingGame()
-    a, b, c = game.play()
+    game_states, policies, target_values = game.play()
     game.engine.quit()
     del game
-    return [a, b, c]
+    return [game_states, policies, target_values]
 
 
-def process_game_data(game_data, flatten=True):
+def process_game_data(
+    game_data: list[list],
+    flatten: bool = True,
+) -> list[list]:
+    """
+    Process game data returned by get_game_data. Reshuffle entries so it resturns
+    list of three lists: First one contains board states, second contains policy dicts,
+    third one contains game states.
+
+    Parameters
+    ----------
+    game_data : list[list,list,list]
+        list of game data results from get_game_Data.
+    flatten : TYPE, optional
+        If True, inner lists are flattened. The default is True.
+
+    Returns
+    -------
+    list[list]
+        Processed game data.
+
+    """
     game_data = [list(i) for i in zip(*game_data)]
     if flatten:
         game_data = [flatten_list(i) for i in game_data]
     return game_data
 
 
-def create_training_data(num=30, parallel=True, **kwargs):
+def create_training_data(
+    num: int = 30, parallel: bool = True, **kwargs: Any
+) -> list[list]:
+    """
+    Play a number of training games and return processed results
+
+    Parameters
+    ----------
+    num : int, optional
+        Number of games. The default is 30.
+    parallel : bool, optional
+        If True, parallelize using multiprocessing. The default is True.
+    **kwargs : Any
+        Extra parameter passed to process_game_data.
+
+    Returns
+    -------
+    list
+        Processed game data.
+
+    """
     if parallel:
         pool = multiprocessing.Pool(multiprocessing.cpu_count())
         game_data = pool.map(get_game_data, range(num))

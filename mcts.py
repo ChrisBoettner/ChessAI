@@ -5,127 +5,316 @@ Created on Wed May 31 13:24:02 2023
 
 @author: chris
 """
+from __future__ import (
+    annotations,
+)  # used so that Node can references itself in type hint
 
-#!/usr/bin/env python3
-# -*- coding: utf-8 -*-
-"""
-Created on Mon May 29 08:22:40 2023
+from typing import Any, Optional
 
-@author: chris
-"""
 import numpy as np
 from chess import Board, Move
-
-from typing import Any
+from numpy.typing import NDArray
 
 
 class Node:
+    """
+    Node of game tree.
+    """
+
     def __init__(
-        self, state: str, parent=None, policy_probability=1, training_node=False
+        self,
+        state: str,
+        parent: Optional[Node] = None,
+        parent_policy_estimate: float = 1,
     ) -> None:
+        """
+        Initialize node.
+
+        Parameters
+        ----------
+        state : str
+            Game state of Node (FEN).
+        parent : Node, optional
+            Parent node in tree. The default is None, corresponding to the root node.
+        parent_policy_estimate : float, optional
+            The policy value for transition from parent to this node estimated by neural
+            network. The default is 1.
+
+        """
         self.state = state
 
+        # if state is given, create corresponding board
         if self.state is not None:
             self.board = Board(self.state)
             self.game_over = self.board.is_game_over()
-
-        self.parent = parent
-        self.children = {}
-        self.legal_actions = ()
-
-        self.is_leaf = True
-
         self.winner = None
 
+        # parents and children
+        self.parent = parent
+        self.children: dict[str, Node] = {}
+        self.legal_actions = ()
+
+        # when initialized, Node is leaf
+        self.is_leaf = True
+
+        # values estimated by neural network
+        self.nn_value_estimate = None
+        self.nn_policy_estimate = None
+
+        # values connected to policy and PUCT calculation
         self.visits = 0
-        self.total_reward = 0
-        self.policy_probability = policy_probability
+        self.value = 0.
+        self.parent_policy_estimate = (
+            parent_policy_estimate  # policy value estimated by
+        )
+        # parent for this node
 
-        self.puct = None
-        if not training_node:
-            self.calculate_puct()
+        self.calculate_puct()
 
-    def fill(self, action):
-        self.make_board()
-        self.make_move(action)
-        self.set_state()
-        self.check_game_over()
+    def fill(self, action: str) -> Node:
+        """
+        Fill empty node with chosen action.
 
-    def make_board(self):
-        if self.parent.board.fen() == self.parent.state:
-            self.board = self.parent.board
-        else:
-            self.board = Board(self.parent.state)
+        Parameters
+        ----------
+        action : str
+            Action chosen to get from parent node to this node.
 
-    def make_move(self, action):
+        """
+        if self.state is None:
+            self._make_board()
+            self._make_move(action)
+            self._set_state()
+            self._check_game_over()
+
+    def _make_board(self) -> None:
+        """
+        Initialize board as parent board. make_move will turn it into board associated
+        with node.
+
+        """
+        self.board = Board(self.parent.state)
+
+    def _make_move(self, action: str) -> None:
+        """
+        Advance board state based on chosen action.
+
+        Parameters
+        ----------
+        action : str
+            UCI of action.
+
+        """
         self.board.push(Move.from_uci(action))
 
-    def set_state(self):
+    def _set_state(self) -> None:
+        """
+        Set state to current board fen.
+
+        """
         self.state = self.board.fen()
 
-    def check_game_over(self):
+    def _check_game_over(self) -> None:
+        """
+        Check if game is over.
+
+        """
         self.game_over = self.board.is_game_over()
 
-    def expand(self, **kwargs):
-        policy = self.get_nn_policy()
-        for i, move in enumerate(self.board.legal_moves):
+    def expand(self) -> None:
+        """
+        Create children nodes, set legal_actions, set is_leaf = False.
+
+        """
+        policy_estimate = self.get_nn_policy_estimate()
+
+        for move in self.board.legal_moves:
             self.children[move.uci()] = Node(
-                None, parent=self, policy_probability=policy[i], **kwargs
+                None, parent=self, parent_policy_estimate=policy_estimate[move.uci()]
             )
+
         self.legal_actions = list(self.children.keys())
         self.is_leaf = False
 
-    def get_value(self):
-        return np.random.uniform(-1, 1)
+    def get_nn_value_estimate(self) -> float:
+        """
+        Get value estimate for this node from neural network.
 
-    def get_nn_policy(self):
-        pol = np.random.rand(len(list(self.board.legal_moves)))
-        return pol / pol.sum()
+        Returns
+        -------
+        float
+            Value estimate for this node.
 
-    def calculate_puct(self, c=1):
+        """
+        if self.nn_value_estimate:
+            pass
+        else:
+            self.nn_value_estimate = np.random.uniform(-1, 1)
+        return self.nn_value_estimate
+
+    def get_nn_policy_estimate(self) -> dict[str, float]:
+        """
+        Get policy estimated for this node from neural network.
+
+        Returns
+        -------
+        dict[str, float]
+            Dict of estimated policy, of form {move uci: policy value}.
+
+        """
+        if self.nn_policy_estimate:
+            pass
+        else:
+            policy = np.random.rand(len(list(self.board.legal_moves)))
+            policy /= policy.sum()
+            self.nn_policy_estimate = {
+                move.uci(): pol for move, pol in zip(self.board.legal_moves, policy)
+            }
+        return self.nn_policy_estimate
+
+    def calculate_puct(self, c: float = 2) -> None:
+        """
+        Calculate PUCT in order to estimate best move.
+
+        Parameters
+        ----------
+        c : float, optional
+            Hyperparameter balancing exploitation and exploration, higher value favours
+            exploration. The default is 1.
+
+        """
         if self.parent is None:
             pass
+
         elif self.visits == 0:
             self.puct = (
-                c * self.policy_probability * np.sqrt(np.log(self.parent.visits))
+                c * self.parent_policy_estimate * np.sqrt(np.log(self.parent.visits))
             )
+
         else:
-            first_term = self.total_reward / self.visits
+            first_term = self.value / self.visits
             second_term = (
                 c
-                * self.policy_probability
+                * self.parent_policy_estimate
                 * np.sqrt(np.log(self.parent.visits) / (1 + self.visits))
             )
             self.puct = first_term + second_term
 
-    def find_best_child(self):
+    def find_best_child(self) -> tuple[str, Node]:
+        """
+        Return child with best puct value.
+
+        Returns
+        -------
+        tuple[str, Node]
+            Returns best move (uci) and best child node.
+
+        """
         if not self.is_leaf:
             pucts = self.get_child_pucts()
-            return list(self.children.items())[np.argmax(pucts)]
+            best_ind = np.argmax(list(pucts.values()))
+            best_action = list(pucts.keys())[best_ind]
+            return best_action, self.children[best_action]
+        else:
+            raise AttributeError("Node is leaf, has no children. Expand first.")
 
-    def get_child_pucts(self):
-        if not self.is_leaf:
-            return np.array([child.puct for child in self.children.values()])
+    def get_child_pucts(self) -> dict[str, float]:
+        """
+        Get PUCTs of children.
 
-    def get_child_rewards(self):
-        if not self.is_leaf:
-            return np.array([child.total_reward for child in self.children.values()])
+        Returns
+        -------
+        dict[str, float]
+            Dict of form {move uci: puct}.
 
-    def get_child_visits(self):
+        """
         if not self.is_leaf:
-            return np.array([child.visits for child in self.children.values()])
+            return {action: child.puct for action, child in self.children.items()}
+        else:
+            raise AttributeError("Node is leaf, has no children. Expand first.")
+
+    def get_child_values(self) -> dict[str, float]:
+        """
+        Get values of children.
+
+        Returns
+        -------
+        dict[str, float]
+            Dict of form {move uci: value}.
+
+        """
+        if not self.is_leaf:
+            return {action: child.value for action, child in self.children.items()}
+        else:
+            raise AttributeError("Node is leaf, has no children. Expand first.")
+
+    def get_child_visits(self) -> dict[str, float]:
+        """
+        Get number of visits of children.
+
+        Returns
+        -------
+        dict[str, float]
+            Dict of form {move uci: visits}.
+
+        """
+        if not self.is_leaf:
+            return {action: child.visits for action, child in self.children.items()}
+        else:
+            raise AttributeError("Node is leaf, has no children. Expand first.")
 
 
 class Game:
-    def __init__(self, root_state=None) -> None:
+    """
+    MCTS game.
+    """
+
+    def __init__(self, root_state: Optional[str] = None) -> None:
+        """
+        Initialize mcts game.
+
+        Parameters
+        ----------
+        root_state : str, optional
+            FEN of initital state. The default is None, which corresponds to a
+            starting board.
+
+        """
         self.root_state = root_state
         self.reset()
 
+    def reset(self) -> None:
+        """
+        Reset game: set move counter to 0, initialize root node.
+
+        """
+        self.move_counter = 0
+        if self.root_state is None:
+            self.root = Node(Board().fen())
+        else:
+            self.root = Node(self.root_state)
+
     def play(self, **kwargs: Any) -> tuple[list, list, list]:
+        """
+        Play game until end and save board states, policies, target values.
+
+        Parameters
+        ----------
+        **kwargs : Any
+            Additional parameter passed to choose_move.
+
+        Returns
+        -------
+        tuple[list, list, list]
+            Lists of game relevant information: board states, policies, target values.
+
+        """
         game_states = []
         policies = []
 
-        node = self.root
+        node = self.root  # create initial node
+        if not node.is_leaf:
+            raise RuntimeError("Reset game first.")
 
         game_states.append(node.board.fen())
         while True:
@@ -136,22 +325,40 @@ class Game:
             policies.append(policy)
             game_states.append(node.board.fen())
 
-            if node.board.is_game_over():
-                policies.append({})  # append empty distribution
+            if node.game_over:
+                policies.append({})  # append empty dict, to have same length
+                # as game_states
                 break
 
         target_values = self.get_target_values(node)
-        self.reset()
         return game_states, policies, target_values
 
-    def reset(self):
-        self.move_counter = 0
-        if self.root_state is None:
-            self.root = Node(Board().fen())
-        else:
-            self.root = Node(self.root_state)
+    def choose_move(
+        self,
+        node: Node,
+        mode: str = "stochastic",
+        **kwargs: Any,
+    ) -> tuple[str, dict]:
+        """
+        Choose move from policies. Mode can be "stochastic" or "deterministic".
 
-    def choose_move(self, node, mode="stochastic", **kwargs):
+        Parameters
+        ----------
+        node : Node
+            The currently active node.
+        mode : str, optional
+            If "stochastic", choose move randomly from possible moves weighted by
+            policy values. If "deterministic", choose move with highest policy value.
+            The default is "stochastic".
+        **kwargs : any
+            Additional parameter passed to get_policy.
+
+        Returns
+        -------
+        tuple(str, dict)
+            Returns choosen move, and policy dict of form {move uci: policy value}.
+
+        """
         policy = self.get_policy(node, **kwargs)
 
         if mode == "stochastic":
@@ -162,21 +369,81 @@ class Game:
             return ValueError("mode not known.")
         return action, policy
 
-    def make_move(self, node, action):
+    def make_move(self, node: Node, action: str) -> Node:
+        """
+        Make move by choosing child node corresponding to chosen action.
+
+        Parameters
+        ----------
+        node : Node
+            The parent node.
+        action : str
+            The chosen move action.
+
+        Returns
+        -------
+        Node
+            Child node corresponding to the move action.
+
+        """
         return node.children[action]
 
-    def get_policy(self, node, temperature=1, plays=25):
+    def get_policy(
+        self,
+        node: Node,
+        temperature: float = 1,
+        plays: int = 25,
+    ) -> dict[str, float]:
+        """
+        Get policy by performing random playouts based on the number of visits of the
+        child nodes
+
+        Parameters
+        ----------
+        node : Node
+            The current node.
+        temperature : float, optional
+            Temperature parameter that balances exploration and exploitation. Higher
+            values lead to more random moves. The default is 1.
+        plays : int, optional
+            Number of playouts. The default is 25.
+
+        Returns
+        -------
+        dict[str, float]
+            Dict of policy, of form {move uci: policy value}.
+
+        """
+        # perform playouts
         for i in range(plays):
             self.selection(node)
-        policy = np.power(node.get_child_visits(), 1 / temperature)
+
+        child_visits = node.get_child_visits()
+        # calculate policies based on child node visits.
+        policy = np.power(list(child_visits.values()), 1 / temperature)
         policy /= np.sum(policy)  # normalise
         policy = {
             move_uci: policy_value
-            for move_uci, policy_value in zip(node.legal_actions, policy)
+            for move_uci, policy_value in zip(child_visits.keys(), policy)
         }
         return policy
 
-    def get_target_values(self, node):
+    def get_target_values(self, node: Node) -> NDArray:
+        """
+        Calculate target values for every board state: 1 for wins, -1 for losses, 0 for
+        draws.
+
+        Parameters
+        ----------
+        node : Node
+            The final node of the game.
+
+        Returns
+        -------
+        NDArray
+            Array with target values.
+
+        """
         last_turn = node.board.turn
         winner = node.board.outcome().winner
 
@@ -196,30 +463,42 @@ class Game:
                 target_values *= -1
         return target_values
 
-    def selection(self, node=None):
-        if node is None:
-            node = self.root
+    def selection(self, node: Node) -> float:
+        """
+        Recursively select nodes, based on PUCT. If leaf node is encountered, expand
+        node. If node is end node (game over), return value based on outcome.
 
+        Parameters
+        ----------
+        node : Node
+            The current node.
+
+        Returns
+        -------
+        float
+            The value associated with the node.
+
+        """
         node.visits += 1
 
         if node.game_over:
             if node.board.outcome().winner is None:  # draw
-                value = 0
+                value = 0.
             elif node.board.turn == node.board.outcome().winner:  # current player wins
-                value = 1
+                value = 1.
             else:  # opponent wins
-                value = -1
+                value = -1.
 
         else:
             if node.is_leaf:
-                value = node.get_value()
+                value = node.get_nn_value_estimate()
                 node.expand()
             else:
                 best_action, best_child = node.find_best_child()
                 best_child.fill(best_action)
                 value = self.selection(best_child)
 
-        node.total_reward += value
+        node.value += value
         if node != self.root:
             node.calculate_puct()
         return -value
