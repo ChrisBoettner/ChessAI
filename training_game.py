@@ -15,12 +15,13 @@ from chess.engine import Info
 from scipy.special import softmax
 
 from mcts import Game, Node
-from utilities import flatten_list
+from utilities import flatten_list, load_hyperparameter
 
 
 class TrainingGame(Game):
     """
     Class to create training games using stockfish.
+
     """
 
     def __init__(
@@ -47,6 +48,7 @@ class TrainingGame(Game):
         """
         self.root_state = root_state
         self.reset()
+        load_hyperparameter(self, "TRAINING")
 
         if engine == "stockfish":
             self.engine = chess.engine.SimpleEngine.popen_uci(
@@ -77,9 +79,6 @@ class TrainingGame(Game):
     def get_policy(
         self,
         node: Node,
-        time_limit: float = 0.01,
-        temperature: float = 1,
-        mate_score: int = int(1e5),
     ) -> dict[str, float]:
         """
         Get policy by letting stockfish evaluate the next move, and using softmax on
@@ -89,14 +88,6 @@ class TrainingGame(Game):
         ----------
         node : Node
             The node containing the board state.
-        time_limit : float, optional
-            Time limit for stockfish evaluation. The default is .01.
-        temperature : float, optional
-            Temperature parameter that balances exploration and exploitation. Higher
-            values lead to more random moves. The default is 1.
-        mate_score : int, optional
-            Score associated with board states that lead to a check mate. The default
-            is int(1e5).
 
         Returns
         -------
@@ -106,13 +97,13 @@ class TrainingGame(Game):
         """
         infos = self.engine.analyse(
             node.board,
-            chess.engine.Limit(time=time_limit),
+            chess.engine.Limit(time=self.TIME_LIMIT),
             multipv=500,  # maximum number of possible moves considered
             options={
                 "Skill Level": self.engine_skill[self.move_counter % 2]
             },  # probably useless
         )
-        return self.calculate_score(infos, temperature, mate_score)
+        return self.calculate_score(infos, self.TEMPERATURE, self.MATE_SCORE)
 
     @staticmethod
     def calculate_score(
@@ -145,8 +136,8 @@ class TrainingGame(Game):
         scores = softmax(scores) ** (1 / temperature)
         scores /= np.sum(scores)
 
-        scores = {info["pv"][0].uci(): score for info, score in zip(infos, scores)}
-        return scores
+        scores_dict = {info["pv"][0].uci(): score for info, score in zip(infos, scores)}
+        return scores_dict
 
     def set_skill_level(self, engine_skill: int | str | tuple) -> None:
         """
@@ -170,25 +161,23 @@ class TrainingGame(Game):
 
         match engine_skill:
             case "random":
-                engine_skill = self.random_skill_level()
-                engine_skill = (engine_skill, engine_skill)
+                skill_level = (self.random_skill_level(), self.random_skill_level())
             case int():
-                engine_skill = (engine_skill, engine_skill)
+                skill_level = (engine_skill, engine_skill)
             case (int(), int()):
                 pass
             case ("random", int()):
-                engine_skill = (self.random_skill_level(), engine_skill[1])
+                skill_level = (self.random_skill_level(), engine_skill[1])
             case ("random", int()):
-                engine_skill = (engine_skill[0], self.random_skill_level())
+                skill_level = (engine_skill[0], self.random_skill_level())
             case ("random", "random"):
-                engine_skill = (
+                skill_level = (
                     self.random_skill_level(),
                     self.random_skill_level(),
                 )
             case _:
                 raise ValueError("engine_skill input not understood.")
-
-        self.engine_skill = engine_skill
+        self.engine_skill = skill_level
 
     @staticmethod
     def random_skill_level(power: float = 0.2) -> float:
@@ -213,7 +202,7 @@ class TrainingGame(Game):
         return np.random.choice(levels, p=weights / sum(weights))
 
 
-def get_game_data(i: Optional[int] = None) -> list[list]:
+def get_game_data(i: Optional[int] = None) -> list:
     """
     Create TrainingGame object, play game, quit engine and return results. Mainly used
     for parallelizing.

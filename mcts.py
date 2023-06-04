@@ -6,8 +6,8 @@ Created on Wed May 31 13:24:02 2023
 @author: chris
 """
 from __future__ import (
-    annotations,
-)  # used so that Node can references itself in type hint
+    annotations,  # used so that Node can references itself in type hint
+)
 
 from typing import Any, Optional
 
@@ -15,15 +15,18 @@ import numpy as np
 from chess import Board, Move
 from numpy.typing import NDArray
 
+from utilities import load_hyperparameter
+
 
 class Node:
     """
     Node of game tree.
+
     """
 
     def __init__(
         self,
-        state: str,
+        state: Optional[str] = None,
         parent: Optional[Node] = None,
         parent_policy_estimate: float = 1,
     ) -> None:
@@ -41,37 +44,37 @@ class Node:
             network. The default is 1.
 
         """
+        load_hyperparameter(self, "NODE")
+
         self.state = state
 
         # if state is given, create corresponding board
         if self.state is not None:
             self.board = Board(self.state)
             self.game_over = self.board.is_game_over()
-        self.winner = None
 
         # parents and children
         self.parent = parent
         self.children: dict[str, Node] = {}
-        self.legal_actions = ()
+        self.legal_actions: list[str] = []
 
         # when initialized, Node is leaf
         self.is_leaf = True
 
         # values estimated by neural network
-        self.nn_value_estimate = None
-        self.nn_policy_estimate = None
+        self.nn_value_estimate: Optional[float] = None
+        self.nn_policy_estimate: Optional[dict] = None
 
         # values connected to policy and PUCT calculation
         self.visits = 0
-        self.value = 0.
+        self.value = 0.0
         self.parent_policy_estimate = (
-            parent_policy_estimate  # policy value estimated by
+            parent_policy_estimate  # policy value estimated by parent for this node
         )
-        # parent for this node
 
         self.calculate_puct()
 
-    def fill(self, action: str) -> Node:
+    def fill(self, action: str) -> None:
         """
         Fill empty node with chosen action.
 
@@ -82,20 +85,24 @@ class Node:
 
         """
         if self.state is None:
-            self._make_board()
-            self._make_move(action)
-            self._set_state()
-            self._check_game_over()
+            self.make_parent_board()
+            self.make_move(action)
+            self.set_state()
+        else:
+            pass
 
-    def _make_board(self) -> None:
+    def make_parent_board(self) -> None:
         """
         Initialize board as parent board. make_move will turn it into board associated
         with node.
 
         """
-        self.board = Board(self.parent.state)
+        if self.parent is not None:
+            self.board = Board(self.parent.state)
+        else:
+            raise AttributeError("Node parent is None. Can't create board.")
 
-    def _make_move(self, action: str) -> None:
+    def make_move(self, action: str) -> None:
         """
         Advance board state based on chosen action.
 
@@ -106,15 +113,16 @@ class Node:
 
         """
         self.board.push(Move.from_uci(action))
+        self.check_game_over()
 
-    def _set_state(self) -> None:
+    def set_state(self) -> None:
         """
         Set state to current board fen.
 
         """
         self.state = self.board.fen()
 
-    def _check_game_over(self) -> None:
+    def check_game_over(self) -> None:
         """
         Check if game is over.
 
@@ -172,15 +180,9 @@ class Node:
             }
         return self.nn_policy_estimate
 
-    def calculate_puct(self, c: float = 2) -> None:
+    def calculate_puct(self) -> None:
         """
         Calculate PUCT in order to estimate best move.
-
-        Parameters
-        ----------
-        c : float, optional
-            Hyperparameter balancing exploitation and exploration, higher value favours
-            exploration. The default is 1.
 
         """
         if self.parent is None:
@@ -188,13 +190,15 @@ class Node:
 
         elif self.visits == 0:
             self.puct = (
-                c * self.parent_policy_estimate * np.sqrt(np.log(self.parent.visits))
+                self.C
+                * self.parent_policy_estimate
+                * np.sqrt(np.log(self.parent.visits))
             )
 
         else:
             first_term = self.value / self.visits
             second_term = (
-                c
+                self.C
                 * self.parent_policy_estimate
                 * np.sqrt(np.log(self.parent.visits) / (1 + self.visits))
             )
@@ -267,6 +271,7 @@ class Node:
 class Game:
     """
     MCTS game.
+
     """
 
     def __init__(self, root_state: Optional[str] = None) -> None:
@@ -282,6 +287,7 @@ class Game:
         """
         self.root_state = root_state
         self.reset()
+        load_hyperparameter(self, "MCTS")
 
     def reset(self) -> None:
         """
@@ -294,7 +300,7 @@ class Game:
         else:
             self.root = Node(self.root_state)
 
-    def play(self, **kwargs: Any) -> tuple[list, list, list]:
+    def play(self, **kwargs: Any) -> tuple[list, list, NDArray]:
         """
         Play game until end and save board states, policies, target values.
 
@@ -326,8 +332,7 @@ class Game:
             game_states.append(node.board.fen())
 
             if node.game_over:
-                policies.append({})  # append empty dict, to have same length
-                # as game_states
+                policies.append({})  # to have same length as game_states
                 break
 
         target_values = self.get_target_values(node)
@@ -366,7 +371,7 @@ class Game:
         elif mode == "deterministic":
             action = list(policy.keys())[np.argmax(list(policy.values()))]
         else:
-            return ValueError("mode not known.")
+            raise ValueError("mode not known.")
         return action, policy
 
     def make_move(self, node: Node, action: str) -> Node:
@@ -391,8 +396,6 @@ class Game:
     def get_policy(
         self,
         node: Node,
-        temperature: float = 1,
-        plays: int = 25,
     ) -> dict[str, float]:
         """
         Get policy by performing random playouts based on the number of visits of the
@@ -402,11 +405,6 @@ class Game:
         ----------
         node : Node
             The current node.
-        temperature : float, optional
-            Temperature parameter that balances exploration and exploitation. Higher
-            values lead to more random moves. The default is 1.
-        plays : int, optional
-            Number of playouts. The default is 25.
 
         Returns
         -------
@@ -415,18 +413,18 @@ class Game:
 
         """
         # perform playouts
-        for i in range(plays):
+        for _ in range(self.PLAYS):
             self.selection(node)
 
         child_visits = node.get_child_visits()
         # calculate policies based on child node visits.
-        policy = np.power(list(child_visits.values()), 1 / temperature)
+        policy = np.power(list(child_visits.values()), 1 / self.TEMPERATURE)
         policy /= np.sum(policy)  # normalise
-        policy = {
+        policy_dict = {
             move_uci: policy_value
             for move_uci, policy_value in zip(child_visits.keys(), policy)
         }
-        return policy
+        return policy_dict
 
     def get_target_values(self, node: Node) -> NDArray:
         """
@@ -483,11 +481,11 @@ class Game:
 
         if node.game_over:
             if node.board.outcome().winner is None:  # draw
-                value = 0.
+                value = 0.0
             elif node.board.turn == node.board.outcome().winner:  # current player wins
-                value = 1.
+                value = 1.0
             else:  # opponent wins
-                value = -1.
+                value = -1.0
 
         else:
             if node.is_leaf:

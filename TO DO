@@ -1,4 +1,1 @@
-fix mcts
-clean code (isort, black, mypy, flake8)
-put training parameter in yaml (temperature, time_limit, mate_score), also game parameter (temperature, c puct parameter)
 write save/open class
