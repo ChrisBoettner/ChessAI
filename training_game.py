@@ -11,7 +11,7 @@ from typing import Any, Optional
 
 import chess.engine
 import numpy as np
-from chess.engine import Info
+from chess.engine import InfoDict
 from scipy.special import softmax
 
 from mcts import Game, Node
@@ -48,6 +48,10 @@ class TrainingGame(Game):
         """
         self.root_state = root_state
         self.reset()
+
+        self.TEMPERATURE = 0  # filled with load_hyperparameter
+        self.TIME_LIMIT = 0  # filled with load_hyperparameter
+        self.MATE_SCORE = 0  # filled with load_hyperparameter
         load_hyperparameter(self, "TRAINING")
 
         if engine == "stockfish":
@@ -103,11 +107,11 @@ class TrainingGame(Game):
                 "Skill Level": self.engine_skill[self.move_counter % 2]
             },  # probably useless
         )
-        return self.calculate_score(infos, self.TEMPERATURE, self.MATE_SCORE)
+        return self.calculate_policy(infos, self.TEMPERATURE, self.MATE_SCORE)
 
     @staticmethod
-    def calculate_score(
-        infos: list[Info],
+    def calculate_policy(
+        infos: list[InfoDict],
         temperature: float,
         mate_score: int,
     ) -> dict[str, float]:
@@ -133,10 +137,11 @@ class TrainingGame(Game):
 
         """
         scores = [info["score"].relative.score(mate_score=mate_score) for info in infos]
-        scores = softmax(scores) ** (1 / temperature)
-        scores /= np.sum(scores)
 
-        scores_dict = {info["pv"][0].uci(): score for info, score in zip(infos, scores)}
+        policy = softmax(scores) ** (1 / temperature)
+        policy /= np.sum(policy)
+
+        scores_dict = {info["pv"][0].uci(): pol for info, pol in zip(infos, policy)}
         return scores_dict
 
     def set_skill_level(self, engine_skill: int | str | tuple) -> None:
@@ -180,7 +185,7 @@ class TrainingGame(Game):
         self.engine_skill = skill_level
 
     @staticmethod
-    def random_skill_level(power: float = 0.2) -> float:
+    def random_skill_level(power: float = 0.2) -> int:
         """
         Choose random skill level between 0 and 20. Highest probability is skill level
         10.5, decaying symmetrically outward.

@@ -44,6 +44,7 @@ class Node:
             network. The default is 1.
 
         """
+        self.C = 0  # filled with load_hyperparameter
         load_hyperparameter(self, "NODE")
 
         self.state = state
@@ -128,6 +129,10 @@ class Node:
 
         """
         self.game_over = self.board.is_game_over()
+        if self.game_over:
+            outcome = self.board.outcome()
+            assert outcome is not None
+            self.outcome = outcome
 
     def expand(self) -> None:
         """
@@ -287,6 +292,9 @@ class Game:
         """
         self.root_state = root_state
         self.reset()
+
+        self.TEMPERATURE = 0  # filled with load_hyperparameter
+        self.PLAYS = 0  # filled with load_hyperparameter
         load_hyperparameter(self, "MCTS")
 
     def reset(self) -> None:
@@ -443,12 +451,12 @@ class Game:
 
         """
         last_turn = node.board.turn
-        winner = node.board.outcome().winner
+        winner = node.outcome.winner
 
+        target_values = np.zeros(self.move_counter + 1).astype(int)
         if winner is None:
-            target_values = np.zeros(self.move_counter + 1).astype(int)
+            pass
         else:
-            target_values = np.empty((self.move_counter + 1,)).astype(int)
             if (self.move_counter + 1) % 2:
                 target_values[::2] = 1
                 target_values[1::2] = -1
@@ -480,9 +488,9 @@ class Game:
         node.visits += 1
 
         if node.game_over:
-            if node.board.outcome().winner is None:  # draw
+            if node.outcome.winner is None:  # draw
                 value = 0.0
-            elif node.board.turn == node.board.outcome().winner:  # current player wins
+            elif node.board.turn == node.outcome.winner:  # current player wins
                 value = 1.0
             else:  # opponent wins
                 value = -1.0

@@ -6,9 +6,7 @@ Created on Mon Jan 23 15:24:09 2023
 @author: chris
 """
 
-import os
-import random
-import time
+from typing import Optional
 
 import chess
 import chess.engine
@@ -19,7 +17,7 @@ class Game(object):
         self,
         engine: str = "stockfish",
         player_colour: str = "white",
-        engine_limit: int = 0.1,
+        engine_limit: float = 0.1,
         engine_skill_level: int = 10,
     ) -> None:
         # load engine
@@ -72,6 +70,8 @@ class Game(object):
 
         # print outcome
         outcome = self.board.outcome()
+        assert outcome is not None
+
         if outcome.winner is None:
             print(f"Winner: Draw - {outcome.termination.name}")
         elif outcome.winner is False:
@@ -79,7 +79,7 @@ class Game(object):
         else:
             print("Winner: White")
 
-    def _engine_turn(self) -> chess.Move:
+    def _engine_turn(self) -> Optional[chess.Move]:
         engine_move = self.engine.play(
             self.board, chess.engine.Limit(time=self.engine_limit)
         ).move
@@ -110,6 +110,7 @@ class Game(object):
                 print(
                     "  Input must be correspond to a move value or quit." " Try again."
                 )
+        return None
 
 
 if __name__ == "__main__":
