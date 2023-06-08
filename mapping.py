@@ -194,6 +194,14 @@ class InputMapper:
 
 if __name__ == "__main__":
     from training_game import create_training_data
+    from utilities import DataHandler
+    
+    import time
 
-    boards, policies, values = create_training_data(10)
-    im = InputMapper()
+    start_time = time.time()
+    boards, policies, values = create_training_data(1000)
+    mid = time.time()
+    print(mid - start_time)
+    DataHandler().save(boards, policies, values)
+    print(time.time() - mid)
+    #im = InputMapper()
