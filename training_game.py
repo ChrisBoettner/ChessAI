@@ -56,7 +56,7 @@ class TrainingGame(Game):
 
         if engine == "stockfish":
             self.engine = chess.engine.SimpleEngine.popen_uci(
-                r"stockfish/stockfish_15.1_x64_bmi2"
+                r"stockfish/stockfish"
             )
             self.set_skill_level(engine_skill)
 

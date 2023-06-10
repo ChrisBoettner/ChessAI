@@ -1,0 +1,39 @@
+Compiled myself on Habrok
+
+Howto (ChatGPT):
+
+As of my knowledge cutoff in September 2021, it's hard to point to a specific version of Stockfish that would be guaranteed to work with a specific `glibc` version like 2.28. Stockfish's compatibility with a particular `glibc` version will depend on how it was compiled. 
+
+However, Stockfish is open source, which means that if you have the required development tools, you should be able to compile it on your own system, which would create a version of Stockfish compatible with your current `glibc`.
+
+Here's a basic outline of steps you could take:
+
+1. **Install Required Tools**: Install `g++` and `make` if they are not already installed. These are necessary for building C++ applications. You can install them using your package manager. For Debian-based systems (like Ubuntu), you can use:
+
+```bash
+sudo apt-get update
+sudo apt-get install g++ make
+```
+
+For Red Hat-based systems (like CentOS), you can use:
+
+```bash
+sudo yum install gcc-c++ make
+```
+
+2. **Clone the Stockfish Repository**: You can clone the Stockfish source code from the official GitHub repository:
+
+```bash
+git clone https://github.com/official-stockfish/Stockfish.git
+cd Stockfish/src
+```
+
+3. **Compile the Source Code**: You can compile the source code using the `make` command:
+
+```bash
+make build ARCH=x86-64
+```
+
+This should generate an executable in the `src` directory that is compatible with your `glibc` version. Note that `ARCH=x86-64` specifies the architecture to build for, and you should replace `x86-64` with your actual architecture if it's different.
+
+Please note that the specific steps might change over time as the Stockfish project evolves, so it's always a good idea to check the official documentation or the README files for the most current instructions.
