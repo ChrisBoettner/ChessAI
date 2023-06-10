@@ -199,7 +199,7 @@ if __name__ == "__main__":
     import time
 
     start_time = time.time()
-    boards, policies, values = create_training_data(1000)
+    boards, policies, values = create_training_data(10000)
     mid = time.time()
     print(mid - start_time)
     DataHandler().save(boards, policies, values)
