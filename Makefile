@@ -59,7 +59,7 @@ update_environment:
 
 ## create requirements.txt with pipreqs
 save_requirements:
-	pipreqs --savepath requirements.txt src
+	pipreqs --savepath requirements.txt .
 
 #################################################################################
 # PROJECT RULES                                                                 #
