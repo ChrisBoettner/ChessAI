@@ -1,0 +1,9 @@
+NODE:
+  C           : 2       # Hyperparameter balancing exploitation and exploration (in playouts) in PUCT calculation, higher value favours exploration.
+MCTS:
+  TEMPERATURE : 1       # Temperature parameter that balances exploration and exploitation (in move selection from policy). Higher values lead to more random moves.
+  PLAYS       : 25      # Number of playouts.
+TRAINING:
+  TEMPERATURE : 1       # Temperature parameter that balances exploration and exploitation (in move selection from policy). Higher values lead to more random moves.
+  TIME_LIMIT  : 0.01    # Time limit for stockfish evaluation.
+  MATE_SCORE  : 100000  # Score associated with board states that lead to a check mate.

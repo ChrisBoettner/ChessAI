@@ -18,15 +18,15 @@ clean:
 
 ## Code formatting with black
 black:
-	black . 
+	black src
 	
 ## Lint using flake8
 flake8:
-	flake8 .
+	flake8 src
 	
 ## Static type checking with mypy
 mypy:
-	mypy . 
+	mypy src
 
 ## Sorting imports with isort
 isort:
@@ -36,30 +36,16 @@ isort:
 bettercode:
 	isort .
 	@echo "----------------------------------------------------------------------------------------------------"
-	black .
+	black src
 	@echo "----------------------------------------------------------------------------------------------------"
-	mypy .
+	mypy src
 	@echo "----------------------------------------------------------------------------------------------------"
-	flake8 .
+	flake8 src
 	@echo "----------------------------------------------------------------------------------------------------"
-
-## Create conda environment from yaml
-create_environment:
-	conda env create -f environment.yaml
-
-## Save environment yaml using conda
-save_environment:
-	conda env export > environment.yaml
-	
-## Update existing environment using yaml
-update_environment:
-	conda deactivate
-	conda env update -f environment.yaml --prune
-	conda activate gallifrey
 
 ## create requirements.txt with pipreqs
 save_requirements:
-	pipreqs --savepath requirements.txt .
+	pipreqs --savepath requirements.txt src
 
 #################################################################################
 # PROJECT RULES                                                                 #

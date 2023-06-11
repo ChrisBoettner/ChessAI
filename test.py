@@ -22,9 +22,7 @@ class Game(object):
     ) -> None:
         # load engine
         if engine == "stockfish":
-            self.engine = chess.engine.SimpleEngine.popen_uci(
-                r"stockfish/stockfish"
-            )
+            self.engine = chess.engine.SimpleEngine.popen_uci(r"stockfish/stockfish")
         # set attributes
         if player_colour.casefold() in ["white", "black"]:
             self.player_colour = player_colour
