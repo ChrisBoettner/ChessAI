@@ -10,15 +10,15 @@ from typing import Any
 import tensorflow as tf
 
 
-class AlphaZeroLossComponents(tf.keras.metrics.Metric):
+class AlphaZeroLossMetric(tf.keras.metrics.Metric):
     """
     Custom Keras metric for tracking AlphaZero loss components (total, policy,
     value, and L2) over multiple batches.
     """
 
-    def __init__(self, name: str = "alpha_zero_loss_components", **kwargs: Any) -> None:
+    def __init__(self, name: str = "alpha_zero_loss_metric", **kwargs: Any) -> None:
         """
-        Initializes the AlphaZeroLossComponents metric.
+        Initializes the AlphaZeroLossMetric metric.
 
         Parameters
         ----------
@@ -27,7 +27,7 @@ class AlphaZeroLossComponents(tf.keras.metrics.Metric):
         **kwargs
             Additional keyword arguments.
         """
-        super(AlphaZeroLossComponents, self).__init__(name=name, **kwargs)
+        super(AlphaZeroLossMetric, self).__init__(name=name, **kwargs)
         self.total_loss_tracker = self.add_weight(
             name="total_loss", initializer="zeros"
         )

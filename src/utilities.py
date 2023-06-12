@@ -7,7 +7,7 @@ Created on Thu Jun  1 17:38:47 2023
 """
 import json
 import pathlib
-from typing import Any
+from typing import Any, Optional
 
 from ruamel.yaml import YAML
 
@@ -105,7 +105,10 @@ class DataHandler:
             json.dump(data, f)
 
     @staticmethod
-    def load(filename: str = "game_data") -> tuple[list, list, list]:
+    def load(
+        filename: str = "game_data",
+        num_datapoints: Optional[int] = None,
+    ) -> tuple[list, list, list]:
         """
         Load game data from file.
 
@@ -113,7 +116,9 @@ class DataHandler:
         ----------
         filename : str, optional
             Name of file data is laoded from. The default is "game_data".
-
+        num_datapoints : int, optional
+            Number of lines to read from the file. If None, read all lines.
+            The default is None.
         Returns
         -------
         tuple[list,list,list]
@@ -123,6 +128,10 @@ class DataHandler:
 
         with open(f"data/{filename}.json", "r") as f:
             data = json.load(f)
+
+        # If num_lines is specified and valid, reduce the data to specified lines
+        if (num_datapoints is not None) and (0 < num_datapoints <= len(data)):
+            data = data[:num_datapoints]
 
         # Split the loaded data back into separate lists
         boards = [item["boards"] for item in data]

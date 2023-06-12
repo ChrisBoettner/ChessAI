@@ -12,6 +12,7 @@ NEURAL_NETWORK:
   BATCH_SIZE    : 16       # Batch size for training
   L2_REG        : 0.001    # L2 regularisation parameter
   LEARNING_RATE : 0.001    # Learning rate for optimizer 
-  EPOCHS        : 1000     # Number of epochs
+  EPOCHS        : 10       # Number of epochs
   FILTERS       : 256      # Number of filters in the convolutional layers of the network
   RES_LAYERS    : 19       # Number of residual layers in the network
+  PATIENCE      : 5        # Number of consecutive validation loss increases until early stopping is triggered

@@ -15,5 +15,5 @@ sys.path.append(str(pathlib.Path(__file__).parent.joinpath("src")))
 
 from neural_network.training import Trainer
 
-trainer = Trainer()
+trainer = Trainer(num_datapoints=3200)
 trainer.train()

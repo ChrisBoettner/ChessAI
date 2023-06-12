@@ -52,6 +52,29 @@ def create_generator(
     return generator
 
 
+def name_map(*args: tuple) -> dict[str, tf.Tensor]:
+    """
+    Map tensor tuple to dictionary.
+
+    Parameters
+    ----------
+    *args : tuple
+        Tuple of tensors.
+
+    Returns
+    -------
+    dict[str, tf.Tensor]
+        Dictionary corresponding to tuple.
+
+    """
+    return {
+        "boards": args[0],
+        "policies": args[1],
+        "masks": args[2],
+        "values": args[3],
+    }
+
+
 def prepare_dataset(
     boards: list,
     policies: list,
@@ -93,12 +116,17 @@ def prepare_dataset(
     dataset = tf.data.Dataset.from_generator(
         create_generator(boards, policies, values),
         output_signature=(
-            tf.TensorSpec(shape=(8, 8, 20), dtype=tf.float32),  # boards
+            tf.TensorSpec(
+                shape=(8, 8, 20),
+                dtype=tf.float32,
+            ),  # boards
             tf.TensorSpec(shape=(1968,), dtype=tf.float32),  # policies
             tf.TensorSpec(shape=(1968,), dtype=tf.bool),  # masks
             tf.TensorSpec(shape=(1,), dtype=tf.int32),  # values
         ),
     )
+
+    dataset = dataset.map(name_map)
 
     # Shuffle dataset
     dataset = dataset.shuffle(buffer_size)
