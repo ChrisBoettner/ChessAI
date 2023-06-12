@@ -30,14 +30,29 @@ def flatten_list(nested_list: list[list]) -> list[Any]:
     return [item for sublist in nested_list for item in sublist]
 
 
-def load_hyperparameter(obj: object, hyperparameter_tag: str) -> None:
+def load_hyperparameter(
+    obj: object,
+    hyperparameter_tag: str,
+    verbose: bool = True,
+) -> None:
     """
     Read values from YAML file and write to attributes of object.
+
+    Parameters
+    ----------
+    obj : object
+        Object that gets attributes assigned.
+    hyperparameter_tag: str
+        Name tag of relevant parameter in YAML file.
+    verbose: bool, optional
+        If True, print the parameter that are set. The default is True.
 
     """
     hyperparameter_file = YAML().load(pathlib.Path("data/hyperparameter.yaml"))
     hyperparameter = dict(hyperparameter_file[hyperparameter_tag])
     for key, value in hyperparameter.items():
+        if verbose:
+            print(f"    Setting {key} = {value}")
         setattr(obj, key, value)
 
 

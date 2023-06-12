@@ -246,4 +246,4 @@ class AlphaZeroNetwork(tf.keras.Model):
             x = res_block(x)
         policy_outputs = self.policy_head(x, mask)
         value_outputs = self.value_head(x)
-        return value_outputs, policy_outputs
+        return policy_outputs, value_outputs

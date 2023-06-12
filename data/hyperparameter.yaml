@@ -1,9 +1,17 @@
 NODE:
-  C           : 2       # Hyperparameter balancing exploitation and exploration (in playouts) in PUCT calculation, higher value favours exploration.
+  C             : 2        # Hyperparameter balancing exploitation and exploration (in playouts) in PUCT calculation, higher value favours exploration.
 MCTS:
-  TEMPERATURE : 1       # Temperature parameter that balances exploration and exploitation (in move selection from policy). Higher values lead to more random moves.
-  PLAYS       : 25      # Number of playouts.
+  TEMPERATURE   : 1        # Temperature parameter that balances exploration and exploitation (in move selection from policy). Higher values lead to more random moves.
+  PLAYS         : 25       # Number of playouts.
 TRAINING:
-  TEMPERATURE : 1       # Temperature parameter that balances exploration and exploitation (in move selection from policy). Higher values lead to more random moves.
-  TIME_LIMIT  : 0.01    # Time limit for stockfish evaluation.
-  MATE_SCORE  : 100000  # Score associated with board states that lead to a check mate.
+  TEMPERATURE   : 1        # Temperature parameter that balances exploration and exploitation (in move selection from policy). Higher values lead to more random moves.
+  TIME_LIMIT    : 0.01     # Time limit for stockfish evaluation.
+  MATE_SCORE    : 100000   # Score associated with board states that lead to a check mate.
+NEURAL_NETWORK:
+  BUFFER_SIZE   : 1000     # Buffer size for dataset shuffling, higher value leads to more uniform shuffle
+  BATCH_SIZE    : 16       # Batch size for training
+  L2_REG        : 0.001    # L2 regularisation parameter
+  LEARNING_RATE : 0.001    # Learning rate for optimizer 
+  EPOCHS        : 1000     # Number of epochs
+  FILTERS       : 256      # Number of filters in the convolutional layers of the network
+  RES_LAYERS    : 19       # Number of residual layers in the network
